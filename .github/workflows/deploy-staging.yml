@@ -36,7 +36,7 @@ jobs:
           KINSTA_PLUGINS_BASE: ${{ secrets.KINSTA_PLUGINS_BASE }}
           REMOTE_BASE_PATH: ${{ secrets.REMOTE_BASE_PATH }}
           REMOTE_PATH: ${{ secrets.REMOTE_PATH }}
-          PLUGIN_SUBDIR: wp-content/plugins/dev-config-plugin
+          PLUGIN_SUBDIR: wp-content/plugins/HP-Dev-Config
         run: |
           if [ -z "$SSH_PORT" ]; then SSH_PORT=22; fi
           if [ -n "$REMOTE_PATH" ]; then
@@ -44,7 +44,7 @@ jobs:
           elif [ -n "$REMOTE_BASE_PATH" ]; then
             DEST="$REMOTE_BASE_PATH/$PLUGIN_SUBDIR"
           elif [ -n "$KINSTA_PLUGINS_BASE" ]; then
-            DEST="$KINSTA_PLUGINS_BASE/dev-config-plugin"
+            DEST="$KINSTA_PLUGINS_BASE/HP-Dev-Config"
           else
             echo "No destination path configured. Set REMOTE_PATH or REMOTE_BASE_PATH or KINSTA_PLUGINS_BASE." >&2
             exit 1
@@ -54,5 +54,3 @@ jobs:
             --exclude ".git" \
             --exclude ".github" \
             ./ "$SSH_USER@$SSH_HOST:$DEST/"
-
-
