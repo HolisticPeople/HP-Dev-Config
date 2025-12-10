@@ -3,7 +3,7 @@
  * Plugin Name: HP Dev Configuration
  * Plugin URI: https://github.com/HolisticPeople/HP-Dev-Config
  * Description: One-click dev/staging setup under Tools → Dev Configuration. Choose plugins to force enable/disable and run predefined actions (e.g., noindex). Changes apply only when you click Apply; no auto-enforcement.
- * Version: 1.1.0
+ * Version: 2.0.0
  * Author: HolisticPeople
  * Author URI: https://holisticpeople.com
  */
@@ -19,7 +19,7 @@ if (!function_exists('dev_cfg_array_get')) {
 }
 
 if (!defined('DEV_CFG_PLUGIN_VERSION')) {
-    define('DEV_CFG_PLUGIN_VERSION', '1.1.0');
+    define('DEV_CFG_PLUGIN_VERSION', '2.0.0');
 }
 
 class DevCfgPlugin {
