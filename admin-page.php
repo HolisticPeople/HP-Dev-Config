@@ -3,6 +3,8 @@ if (!defined('ABSPATH')) { exit; }
 
 $allPlugins = isset($allPlugins) ? $allPlugins : [];
 $ui = isset($ui) ? $ui : ['plugin_policies' => [], 'other_actions' => []];
+$configNames = isset($configNames) ? $configNames : [];
+$activeConfigName = isset($activeConfigName) ? $activeConfigName : 'Default';
 
 require_once __DIR__ . '/class-actions.php';
 $registry = DevCfg\Actions::registry();
@@ -11,6 +13,68 @@ settings_errors('dev_cfg');
 ?>
 <div class="wrap">
 	<h1>Dev Configuration <span style="font-weight:normal;color:#666;">v<?php echo esc_html(defined('DEV_CFG_PLUGIN_VERSION') ? DEV_CFG_PLUGIN_VERSION : ''); ?></span></h1>
+
+	<!-- Configuration Management Section -->
+	<div class="dev-cfg-config-section" style="background:#f9f9f9; border:1px solid #ccd0d4; border-radius:4px; padding:16px; margin-bottom:20px;">
+		<h2 style="margin-top:0; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+			<span class="dashicons dashicons-portfolio" style="font-size:20px;"></span>
+			Saved Configurations
+		</h2>
+		
+		<form method="post" style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end;">
+			<?php wp_nonce_field('dev_cfg_config_action', 'dev_cfg_nonce_config'); ?>
+			
+			<div style="flex:0 0 auto;">
+				<label for="dev_cfg_select_config" style="display:block; margin-bottom:4px; font-weight:600;">Select Configuration:</label>
+				<select name="dev_cfg_select_config" id="dev_cfg_select_config" style="min-width:200px; height:32px;">
+					<?php if (empty($configNames)): ?>
+						<option value="">— No configurations saved —</option>
+					<?php else: ?>
+						<?php foreach ($configNames as $name): ?>
+							<option value="<?php echo esc_attr($name); ?>" <?php selected($activeConfigName, $name); ?>>
+								<?php echo esc_html($name); ?>
+								<?php if ($name === $activeConfigName): ?> (active)<?php endif; ?>
+							</option>
+						<?php endforeach; ?>
+					<?php endif; ?>
+				</select>
+			</div>
+
+			<div style="flex:0 0 auto;">
+				<button type="submit" name="dev_cfg_load_config" class="button" <?php echo empty($configNames) ? 'disabled' : ''; ?>>
+					<span class="dashicons dashicons-download" style="vertical-align:middle; margin-right:4px;"></span>
+					Load Selected
+				</button>
+			</div>
+
+			<div style="flex:0 0 auto;">
+				<button type="submit" name="dev_cfg_delete_config" class="button" onclick="return confirm('Are you sure you want to delete this configuration?');" <?php echo empty($configNames) ? 'disabled' : ''; ?>>
+					<span class="dashicons dashicons-trash" style="vertical-align:middle; margin-right:4px;"></span>
+					Delete Selected
+				</button>
+			</div>
+
+			<div style="border-left:1px solid #ccd0d4; padding-left:12px; margin-left:4px; flex:0 0 auto;">
+				<label for="dev_cfg_new_config_name" style="display:block; margin-bottom:4px; font-weight:600;">New Configuration Name:</label>
+				<div style="display:flex; gap:8px;">
+					<input type="text" name="dev_cfg_new_config_name" id="dev_cfg_new_config_name" placeholder="e.g., Staging, Minimal, Debug..." style="width:200px; height:32px;">
+					<button type="submit" name="dev_cfg_save_as_new" class="button button-primary">
+						<span class="dashicons dashicons-plus-alt" style="vertical-align:middle; margin-right:4px;"></span>
+						Save Current as New
+					</button>
+				</div>
+			</div>
+		</form>
+		
+		<?php if (!empty($activeConfigName)): ?>
+		<p style="margin-top:12px; margin-bottom:0; color:#666;">
+			<strong>Currently editing:</strong> 
+			<span style="background:#0073aa; color:#fff; padding:2px 8px; border-radius:3px; font-weight:600;">
+				<?php echo esc_html($activeConfigName); ?>
+			</span>
+		</p>
+		<?php endif; ?>
+	</div>
 
 	<form method="post">
 		<?php wp_nonce_field('dev_cfg_refresh'); ?>
@@ -156,11 +220,15 @@ settings_errors('dev_cfg');
 
 		<p style="margin-top:16px; display:flex; gap:12px; align-items:center;">
 			<?php wp_nonce_field('dev_cfg_save', 'dev_cfg_nonce_save'); ?>
-			<button type="submit" name="dev_cfg_save" class="button">Save configuration</button>
+			<button type="submit" name="dev_cfg_save" class="button">
+				<span class="dashicons dashicons-saved" style="vertical-align:middle; margin-right:4px;"></span>
+				Save to "<?php echo esc_attr($activeConfigName); ?>"
+			</button>
 			<?php $is_production = function_exists('wp_get_environment_type') ? (wp_get_environment_type() === 'production') : false; ?>
-			<button type="submit" name="dev_cfg_apply" class="button button-primary"<?php if ($is_production) { echo ' onclick="return window.confirm(\'Warning: You are on LIVE/production. This will change plugin states and settings. Continue?\')"'; } ?>>Apply fresh dev configuration</button>
+			<button type="submit" name="dev_cfg_apply" class="button button-primary"<?php if ($is_production) { echo ' onclick="return window.confirm(\'Warning: You are on LIVE/production. This will change plugin states and settings. Continue?\')"'; } ?>>
+				<span class="dashicons dashicons-controls-play" style="vertical-align:middle; margin-right:4px;"></span>
+				Apply fresh dev configuration
+			</button>
 		</p>
 	</form>
 </div>
-
-

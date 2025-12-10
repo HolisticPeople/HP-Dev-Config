@@ -1,9 +1,11 @@
 <?php
 /**
- * Plugin Name: Dev Configuration Tools
+ * Plugin Name: HP Dev Configuration
+ * Plugin URI: https://github.com/HolisticPeople/HP-Dev-Config
  * Description: One-click dev/staging setup under Tools → Dev Configuration. Choose plugins to force enable/disable and run predefined actions (e.g., noindex). Changes apply only when you click Apply; no auto-enforcement.
- * Version: 1.0.0
+ * Version: 2.0.0
  * Author: HolisticPeople
+ * Author URI: https://holisticpeople.com
  */
 
 if (!defined('ABSPATH')) {
@@ -17,12 +19,13 @@ if (!function_exists('dev_cfg_array_get')) {
 }
 
 if (!defined('DEV_CFG_PLUGIN_VERSION')) {
-    define('DEV_CFG_PLUGIN_VERSION', '1.0.0');
+    define('DEV_CFG_PLUGIN_VERSION', '2.0.0');
 }
 
 class DevCfgPlugin {
 	const OPTION_KEY = 'dev_config_plugin_settings';
 	const MENU_SLUG = 'dev-config-tools';
+	const DEFAULT_CONFIG_NAME = 'Default';
 
 	public static function init() {
 		add_action('admin_menu', [__CLASS__, 'register_tools_page']);
@@ -41,13 +44,13 @@ class DevCfgPlugin {
 		);
 	}
 
+	/**
+	 * Get all settings including saved configurations
+	 */
 	public static function get_settings() {
 		$defaults = [
-			'plugin_policies' => [],
-			'other_actions' => [
-				'noindex' => true, // default checked
-				'fluent_smtp_simulation' => 'enable', // default radio selection
-			],
+			'saved_configs' => [],
+			'active_config' => self::DEFAULT_CONFIG_NAME,
 			'ui_prefs' => [
 				'preserve_refresh' => true,
 			],
@@ -56,11 +59,107 @@ class DevCfgPlugin {
 		if (!is_array($settings)) {
 			$settings = [];
 		}
+		
+		// Migration: convert old format to new format
+		if (isset($settings['plugin_policies']) && !isset($settings['saved_configs'])) {
+			$migrated = [
+				'saved_configs' => [
+					self::DEFAULT_CONFIG_NAME => [
+						'plugin_policies' => dev_cfg_array_get($settings, 'plugin_policies', []),
+						'other_actions' => dev_cfg_array_get($settings, 'other_actions', []),
+					]
+				],
+				'active_config' => self::DEFAULT_CONFIG_NAME,
+				'ui_prefs' => dev_cfg_array_get($settings, 'ui_prefs', $defaults['ui_prefs']),
+			];
+			// Save migrated settings
+			update_option(self::OPTION_KEY, $migrated);
+			return array_replace_recursive($defaults, $migrated);
+		}
+		
 		return array_replace_recursive($defaults, $settings);
+	}
+
+	/**
+	 * Get the active configuration data
+	 */
+	public static function get_active_config() {
+		$settings = self::get_settings();
+		$activeName = dev_cfg_array_get($settings, 'active_config', self::DEFAULT_CONFIG_NAME);
+		$configs = dev_cfg_array_get($settings, 'saved_configs', []);
+		
+		if (isset($configs[$activeName])) {
+			return $configs[$activeName];
+		}
+		
+		// Return defaults if no config exists
+		return [
+			'plugin_policies' => [],
+			'other_actions' => [
+				'noindex' => true,
+				'fluent_smtp_simulation' => 'enable',
+			],
+		];
+	}
+
+	/**
+	 * Get list of all saved configuration names
+	 */
+	public static function get_config_names() {
+		$settings = self::get_settings();
+		$configs = dev_cfg_array_get($settings, 'saved_configs', []);
+		return array_keys($configs);
 	}
 
 	public static function update_settings($settings) {
 		update_option(self::OPTION_KEY, $settings);
+	}
+
+	/**
+	 * Save a configuration with a given name
+	 */
+	public static function save_config($name, $plugin_policies, $other_actions) {
+		$settings = self::get_settings();
+		if (!isset($settings['saved_configs'])) {
+			$settings['saved_configs'] = [];
+		}
+		$settings['saved_configs'][$name] = [
+			'plugin_policies' => $plugin_policies,
+			'other_actions' => $other_actions,
+		];
+		$settings['active_config'] = $name;
+		self::update_settings($settings);
+	}
+
+	/**
+	 * Delete a configuration by name
+	 */
+	public static function delete_config($name) {
+		$settings = self::get_settings();
+		if (isset($settings['saved_configs'][$name])) {
+			unset($settings['saved_configs'][$name]);
+			// If we deleted the active config, switch to first available or create default
+			if ($settings['active_config'] === $name) {
+				$remaining = array_keys($settings['saved_configs']);
+				$settings['active_config'] = !empty($remaining) ? $remaining[0] : self::DEFAULT_CONFIG_NAME;
+			}
+			self::update_settings($settings);
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Set active configuration
+	 */
+	public static function set_active_config($name) {
+		$settings = self::get_settings();
+		if (isset($settings['saved_configs'][$name])) {
+			$settings['active_config'] = $name;
+			self::update_settings($settings);
+			return true;
+		}
+		return false;
 	}
 
 	private static function sanitize_policies($rawPolicies) {
@@ -112,34 +211,90 @@ class DevCfgPlugin {
 		}
 
 		$settings = self::get_settings();
+		$activeConfig = self::get_active_config();
+		
 		$postedPolicies = isset($_POST['dev_cfg_policy']) ? self::sanitize_policies($_POST['dev_cfg_policy']) : null;
 		$postedActions = isset($_POST['dev_cfg_action']) ? self::sanitize_other_actions($_POST['dev_cfg_action']) : null;
 		$uiSelections = [
-			'plugin_policies' => is_array($postedPolicies) ? $postedPolicies : dev_cfg_array_get($settings, 'plugin_policies', []),
-			'other_actions' => is_array($postedActions) ? $postedActions : dev_cfg_array_get($settings, 'other_actions', []),
+			'plugin_policies' => is_array($postedPolicies) ? $postedPolicies : dev_cfg_array_get($activeConfig, 'plugin_policies', []),
+			'other_actions' => is_array($postedActions) ? $postedActions : dev_cfg_array_get($activeConfig, 'other_actions', []),
 		];
 		$GLOBALS['dev_cfg_ui_selections'] = $uiSelections;
 
+		// Handle refresh
 		if (isset($_POST['dev_cfg_refresh'])) {
 			check_admin_referer('dev_cfg_refresh');
 			add_settings_error('dev_cfg', 'refreshed', 'Plugin list refreshed. Selections preserved.', 'updated');
 			return;
 		}
 
-		// Save configuration only (non-destructive)
+		// Handle load configuration
+		if (isset($_POST['dev_cfg_load_config'])) {
+			if (!isset($_POST['dev_cfg_nonce_config']) || !wp_verify_nonce($_POST['dev_cfg_nonce_config'], 'dev_cfg_config_action')) {
+				wp_die('Security check failed. Please try again.');
+			}
+			$configName = isset($_POST['dev_cfg_select_config']) ? sanitize_text_field($_POST['dev_cfg_select_config']) : '';
+			if ($configName && self::set_active_config($configName)) {
+				$loadedConfig = self::get_active_config();
+				$GLOBALS['dev_cfg_ui_selections'] = [
+					'plugin_policies' => dev_cfg_array_get($loadedConfig, 'plugin_policies', []),
+					'other_actions' => dev_cfg_array_get($loadedConfig, 'other_actions', []),
+				];
+				add_settings_error('dev_cfg', 'loaded', 'Configuration "' . esc_html($configName) . '" loaded.', 'updated');
+			} else {
+				add_settings_error('dev_cfg', 'load_error', 'Failed to load configuration.', 'error');
+			}
+			return;
+		}
+
+		// Handle save as new configuration
+		if (isset($_POST['dev_cfg_save_as_new'])) {
+			if (!isset($_POST['dev_cfg_nonce_config']) || !wp_verify_nonce($_POST['dev_cfg_nonce_config'], 'dev_cfg_config_action')) {
+				wp_die('Security check failed. Please try again.');
+			}
+			$newName = isset($_POST['dev_cfg_new_config_name']) ? sanitize_text_field(trim($_POST['dev_cfg_new_config_name'])) : '';
+			if (empty($newName)) {
+				add_settings_error('dev_cfg', 'name_error', 'Please provide a name for the new configuration.', 'error');
+				return;
+			}
+			$policies = is_array($postedPolicies) ? $postedPolicies : dev_cfg_array_get($activeConfig, 'plugin_policies', []);
+			$actions = is_array($postedActions) ? $postedActions : dev_cfg_array_get($activeConfig, 'other_actions', []);
+			self::save_config($newName, $policies, $actions);
+			add_settings_error('dev_cfg', 'saved_new', 'Configuration "' . esc_html($newName) . '" saved.', 'updated');
+			return;
+		}
+
+		// Handle delete configuration
+		if (isset($_POST['dev_cfg_delete_config'])) {
+			if (!isset($_POST['dev_cfg_nonce_config']) || !wp_verify_nonce($_POST['dev_cfg_nonce_config'], 'dev_cfg_config_action')) {
+				wp_die('Security check failed. Please try again.');
+			}
+			$configToDelete = isset($_POST['dev_cfg_select_config']) ? sanitize_text_field($_POST['dev_cfg_select_config']) : '';
+			if ($configToDelete && self::delete_config($configToDelete)) {
+				$loadedConfig = self::get_active_config();
+				$GLOBALS['dev_cfg_ui_selections'] = [
+					'plugin_policies' => dev_cfg_array_get($loadedConfig, 'plugin_policies', []),
+					'other_actions' => dev_cfg_array_get($loadedConfig, 'other_actions', []),
+				];
+				add_settings_error('dev_cfg', 'deleted', 'Configuration "' . esc_html($configToDelete) . '" deleted.', 'updated');
+			} else {
+				add_settings_error('dev_cfg', 'delete_error', 'Failed to delete configuration.', 'error');
+			}
+			return;
+		}
+
+		// Save configuration (update current)
 		if (isset($_POST['dev_cfg_save'])) {
 			if (!isset($_POST['dev_cfg_nonce_save']) || !wp_verify_nonce($_POST['dev_cfg_nonce_save'], 'dev_cfg_save')) {
 				wp_die('Security check failed. Please try again.');
 			}
-			$policies = is_array($postedPolicies) ? $postedPolicies : dev_cfg_array_get($settings, 'plugin_policies', []);
-			$actions = is_array($postedActions) ? $postedActions : dev_cfg_array_get($settings, 'other_actions', []);
+			$policies = is_array($postedPolicies) ? $postedPolicies : dev_cfg_array_get($activeConfig, 'plugin_policies', []);
+			$actions = is_array($postedActions) ? $postedActions : dev_cfg_array_get($activeConfig, 'other_actions', []);
+			
+			$currentName = dev_cfg_array_get($settings, 'active_config', self::DEFAULT_CONFIG_NAME);
+			self::save_config($currentName, $policies, $actions);
 
-			$save = self::get_settings();
-			$save['plugin_policies'] = $policies;
-			$save['other_actions'] = $actions;
-			self::update_settings($save);
-
-			add_settings_error('dev_cfg', 'saved', 'Configuration saved (no changes applied yet).', 'updated');
+			add_settings_error('dev_cfg', 'saved', 'Configuration "' . esc_html($currentName) . '" saved (no changes applied yet).', 'updated');
 			return;
 		}
 
@@ -150,10 +305,8 @@ class DevCfgPlugin {
 			$policies = is_array($postedPolicies) ? $postedPolicies : [];
 			$actions = is_array($postedActions) ? $postedActions : [];
 
-			$save = self::get_settings();
-			$save['plugin_policies'] = $policies;
-			$save['other_actions'] = $actions;
-			self::update_settings($save);
+			$currentName = dev_cfg_array_get($settings, 'active_config', self::DEFAULT_CONFIG_NAME);
+			self::save_config($currentName, $policies, $actions);
 
 			$results = self::apply_configuration($policies, $actions);
 			$summary = self::format_results_notice($results);
@@ -295,11 +448,15 @@ private static function apply_configuration($policies, $actions) {
 		}
 
 		$settings = self::get_settings();
+		$activeConfig = self::get_active_config();
+		$configNames = self::get_config_names();
+		$activeConfigName = dev_cfg_array_get($settings, 'active_config', self::DEFAULT_CONFIG_NAME);
+		
 		$ui = isset($GLOBALS['dev_cfg_ui_selections']) && is_array($GLOBALS['dev_cfg_ui_selections'])
 			? $GLOBALS['dev_cfg_ui_selections']
 			: [
-				'plugin_policies' => dev_cfg_array_get($settings, 'plugin_policies', []),
-				'other_actions' => dev_cfg_array_get($settings, 'other_actions', []),
+				'plugin_policies' => dev_cfg_array_get($activeConfig, 'plugin_policies', []),
+				'other_actions' => dev_cfg_array_get($activeConfig, 'other_actions', []),
 			];
 
 		if (!function_exists('get_plugins')) {
@@ -318,5 +475,4 @@ private static function apply_configuration($policies, $actions) {
 }
 
 DevCfgPlugin::init();
-
 
