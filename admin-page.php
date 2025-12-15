@@ -8,6 +8,8 @@ $activeConfigName = isset($activeConfigName) ? $activeConfigName : 'Default';
 
 require_once __DIR__ . '/class-actions.php';
 $registry = DevCfg\Actions::registry();
+$mcp_creds = DevCfg\Actions::get_mcp_credentials();
+$current_env = DevCfg\Actions::detect_environment();
 
 settings_errors('dev_cfg');
 ?>
@@ -186,6 +188,73 @@ settings_errors('dev_cfg');
 			});
 		})();
 		</script>
+
+		<!-- MCP Credentials Section -->
+		<div class="dev-cfg-mcp-section" style="background:#f0f6fc; border:1px solid #c3c4c7; border-left:4px solid #2271b1; border-radius:4px; padding:16px; margin:20px 0;">
+			<h2 style="margin-top:0; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+				<span class="dashicons dashicons-rest-api" style="font-size:20px; color:#2271b1;"></span>
+				MCP Credentials
+				<span style="font-size:12px; font-weight:normal; background:<?php echo $current_env === 'staging' ? '#d63638' : '#00a32a'; ?>; color:#fff; padding:2px 8px; border-radius:3px;">
+					Current: <?php echo esc_html(ucfirst($current_env)); ?>
+				</span>
+			</h2>
+			<p style="color:#50575e; margin-bottom:16px;">
+				Store API credentials for both environments. After a production→staging push, run "Setup MCP" to restore staging keys.
+				<br><strong>Note:</strong> These credentials are stored in the database. On production, store BOTH sets so they survive the push.
+			</p>
+			
+			<div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+				<?php foreach (['staging', 'production'] as $env): ?>
+				<div style="background:#fff; border:1px solid #c3c4c7; border-radius:4px; padding:12px; <?php echo $env === $current_env ? 'box-shadow:0 0 0 2px #2271b1;' : ''; ?>">
+					<h3 style="margin:0 0 10px 0; display:flex; align-items:center; gap:6px;">
+						<?php echo ucfirst($env); ?> Keys
+						<?php if ($env === $current_env): ?>
+							<span style="font-size:10px; background:#2271b1; color:#fff; padding:1px 6px; border-radius:2px;">ACTIVE</span>
+						<?php endif; ?>
+					</h3>
+					
+					<label style="display:block; margin-bottom:8px;">
+						<span style="display:block; font-weight:600; margin-bottom:2px;">Consumer Key:</span>
+						<input type="text" name="mcp_creds[<?php echo $env; ?>][consumer_key]" 
+							value="<?php echo esc_attr($mcp_creds[$env]['consumer_key']); ?>" 
+							placeholder="ck_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+							style="width:100%; font-family:monospace; font-size:12px;">
+					</label>
+					
+					<label style="display:block; margin-bottom:8px;">
+						<span style="display:block; font-weight:600; margin-bottom:2px;">Consumer Secret:</span>
+						<input type="password" name="mcp_creds[<?php echo $env; ?>][consumer_secret]" 
+							value="<?php echo esc_attr($mcp_creds[$env]['consumer_secret']); ?>" 
+							placeholder="cs_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+							style="width:100%; font-family:monospace; font-size:12px;">
+					</label>
+					
+					<label style="display:block;">
+						<span style="display:block; font-weight:600; margin-bottom:2px;">User ID:</span>
+						<input type="number" name="mcp_creds[<?php echo $env; ?>][user_id]" 
+							value="<?php echo esc_attr($mcp_creds[$env]['user_id'] ?: 1); ?>" 
+							min="1" style="width:80px;">
+						<span style="color:#666; font-size:12px;">(WordPress admin user)</span>
+					</label>
+					
+					<?php if (!empty($mcp_creds[$env]['consumer_key'])): ?>
+						<p style="margin:8px 0 0 0; color:#00a32a; font-size:12px;">
+							✓ Credentials stored (key ends: ...<?php echo esc_html(substr($mcp_creds[$env]['consumer_key'], -7)); ?>)
+						</p>
+					<?php else: ?>
+						<p style="margin:8px 0 0 0; color:#d63638; font-size:12px;">
+							✗ No credentials stored
+						</p>
+					<?php endif; ?>
+				</div>
+				<?php endforeach; ?>
+			</div>
+			
+			<p style="margin:12px 0 0 0; font-size:12px; color:#50575e;">
+				<strong>Workflow:</strong> 1) Create API keys in WooCommerce → Settings → Advanced → REST API on each environment. 
+				2) Enter credentials above on <strong>production</strong>. 3) After any prod→staging push, go to Dev Config and run "Setup MCP".
+			</p>
+		</div>
 
 		<h2 style="margin-top:24px;">Other actions</h2>
 		<table class="widefat fixed striped">
