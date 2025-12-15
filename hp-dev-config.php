@@ -3,7 +3,7 @@
  * Plugin Name: HP Dev Configuration
  * Plugin URI: https://github.com/HolisticPeople/HP-Dev-Config
  * Description: One-click dev/staging setup under Tools → Dev Configuration. Choose plugins to force enable/disable and run predefined actions (e.g., noindex). Changes apply only when you click Apply; no auto-enforcement.
- * Version: 2.0.0
+ * Version: 2.2.0
  * Author: HolisticPeople
  * Author URI: https://holisticpeople.com
  */
@@ -19,7 +19,7 @@ if (!function_exists('dev_cfg_array_get')) {
 }
 
 if (!defined('DEV_CFG_PLUGIN_VERSION')) {
-    define('DEV_CFG_PLUGIN_VERSION', '2.0.0');
+    define('DEV_CFG_PLUGIN_VERSION', '2.2.0');
 }
 
 class DevCfgPlugin {
@@ -288,13 +288,29 @@ class DevCfgPlugin {
 			if (!isset($_POST['dev_cfg_nonce_save']) || !wp_verify_nonce($_POST['dev_cfg_nonce_save'], 'dev_cfg_save')) {
 				wp_die('Security check failed. Please try again.');
 			}
+			
+			// Save MCP credentials if provided
+			if (isset($_POST['mcp_creds']) && is_array($_POST['mcp_creds'])) {
+				require_once __DIR__ . '/class-actions.php';
+				foreach (['staging', 'production'] as $env) {
+					if (isset($_POST['mcp_creds'][$env])) {
+						$ck = isset($_POST['mcp_creds'][$env]['consumer_key']) ? sanitize_text_field($_POST['mcp_creds'][$env]['consumer_key']) : '';
+						$cs = isset($_POST['mcp_creds'][$env]['consumer_secret']) ? sanitize_text_field($_POST['mcp_creds'][$env]['consumer_secret']) : '';
+						$uid = isset($_POST['mcp_creds'][$env]['user_id']) ? absint($_POST['mcp_creds'][$env]['user_id']) : 1;
+						if ($ck || $cs) {
+							DevCfg\Actions::save_mcp_credentials($env, $ck, $cs, $uid);
+						}
+					}
+				}
+			}
+			
 			$policies = is_array($postedPolicies) ? $postedPolicies : dev_cfg_array_get($activeConfig, 'plugin_policies', []);
 			$actions = is_array($postedActions) ? $postedActions : dev_cfg_array_get($activeConfig, 'other_actions', []);
 			
 			$currentName = dev_cfg_array_get($settings, 'active_config', self::DEFAULT_CONFIG_NAME);
 			self::save_config($currentName, $policies, $actions);
 
-			add_settings_error('dev_cfg', 'saved', 'Configuration "' . esc_html($currentName) . '" saved (no changes applied yet).', 'updated');
+			add_settings_error('dev_cfg', 'saved', 'Configuration "' . esc_html($currentName) . '" saved (MCP credentials updated).', 'updated');
 			return;
 		}
 
@@ -302,6 +318,22 @@ class DevCfgPlugin {
 			if (!isset($_POST['dev_cfg_nonce_apply']) || !wp_verify_nonce($_POST['dev_cfg_nonce_apply'], 'dev_cfg_apply')) {
 				wp_die('Security check failed. Please try again.');
 			}
+			
+			// Save MCP credentials if provided
+			if (isset($_POST['mcp_creds']) && is_array($_POST['mcp_creds'])) {
+				require_once __DIR__ . '/class-actions.php';
+				foreach (['staging', 'production'] as $env) {
+					if (isset($_POST['mcp_creds'][$env])) {
+						$ck = isset($_POST['mcp_creds'][$env]['consumer_key']) ? sanitize_text_field($_POST['mcp_creds'][$env]['consumer_key']) : '';
+						$cs = isset($_POST['mcp_creds'][$env]['consumer_secret']) ? sanitize_text_field($_POST['mcp_creds'][$env]['consumer_secret']) : '';
+						$uid = isset($_POST['mcp_creds'][$env]['user_id']) ? absint($_POST['mcp_creds'][$env]['user_id']) : 1;
+						if ($ck || $cs) { // Only save if at least one field is provided
+							DevCfg\Actions::save_mcp_credentials($env, $ck, $cs, $uid);
+						}
+					}
+				}
+			}
+			
 			$policies = is_array($postedPolicies) ? $postedPolicies : [];
 			$actions = is_array($postedActions) ? $postedActions : [];
 
