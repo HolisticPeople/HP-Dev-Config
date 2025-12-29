@@ -189,6 +189,9 @@ class Actions {
 
 	/**
 	 * Restore/create MCP API key in WooCommerce
+	 * 
+	 * WooCommerce stores consumer_key as hash, but consumer_secret as PLAINTEXT.
+	 * The mcp-session-relax MU plugin authenticates using the hashed key lookup.
 	 */
 	private static function restore_mcp_api_key($creds) {
 		global $wpdb;
@@ -209,16 +212,18 @@ class Actions {
 		));
 
 		if ($existing) {
-			return ['ok' => true, 'message' => 'API key already exists', 'changed' => false];
+			return ['ok' => true, 'message' => 'API key already exists (key_id: ' . $existing . ')', 'changed' => false];
 		}
 
-		// Delete any old MCP keys for this user (cleanup)
+		// Delete any old MCP keys with same description for this user (cleanup)
 		$wpdb->delete($table, [
 			'user_id' => $user_id,
 			'description' => $description,
 		]);
 
 		// Insert the new key
+		// Note: WooCommerce stores consumer_secret as plaintext (not hashed)
+		// The consumer_key is hashed, truncated_key is last 7 chars of plaintext key
 		$truncated_key = substr($consumer_key, -7);
 		$result = $wpdb->insert($table, [
 			'user_id' => $user_id,
@@ -233,7 +238,8 @@ class Actions {
 			return ['ok' => false, 'message' => 'Failed to create API key: ' . $wpdb->last_error, 'changed' => false];
 		}
 
-		return ['ok' => true, 'message' => 'API key restored', 'changed' => true];
+		$new_key_id = $wpdb->insert_id;
+		return ['ok' => true, 'message' => "API key restored (key_id: {$new_key_id})", 'changed' => true];
 	}
 
 	/**

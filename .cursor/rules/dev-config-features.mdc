@@ -1,0 +1,52 @@
+---
+alwaysApply: true
+---
+## HP-Dev-Config Plugin Features
+
+This plugin manages development-specific configurations that need to persist across environment syncs.
+
+### Key Actions
+
+#### Setup WooCommerce MCP
+Configures the MCP (Model Context Protocol) integration:
+- Creates/restores `mcp-session-relax.php` MU plugin
+- Enables the WooCommerce MCP feature if not already enabled
+- Manages API keys for staging vs production
+
+**When to Use:**
+- After pushing production to staging (restores staging MCP config)
+- Setting up a new environment for AI development
+- Troubleshooting MCP connection issues
+
+#### Apply Noindex
+Prevents staging from being indexed by search engines.
+
+**Critical:** Only check this on staging, NEVER on production!
+
+### Environment Detection
+
+The plugin detects the environment via URL patterns:
+- **Staging**: Contains `env-` or `.kinsta.cloud`
+- **Production**: `holisticpeople.com` without staging indicators
+
+### MCP Credentials Storage
+
+The plugin stores MCP API keys in WordPress options:
+- `hp_dev_config_mcp_staging_key` - Staging consumer key:secret
+- `hp_dev_config_mcp_production_key` - Production consumer key:secret
+
+These are used by the "Setup WooCommerce MCP" action to configure the correct API key based on detected environment.
+
+### Production-to-Staging Push Recovery
+
+When Kinsta pushes production to staging:
+1. Database is overwritten (staging MCP config lost)
+2. Run "Setup WooCommerce MCP" action on staging
+3. This restores the staging API key and MU plugin
+
+### Files Managed
+
+| File | Location | Purpose |
+|------|----------|---------|
+| `mcp-session-relax.php` | `mu-plugins/` | Relaxes MCP session validation |
+| `mcp-clean-rest.php` | `mu-plugins/` | Ensures clean JSON responses |
