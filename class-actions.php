@@ -26,6 +26,11 @@ class Actions {
 				'description' => 'Creates/restores MU plugin for AI MCP access. Use after production→staging push.',
 				'runner' => [__CLASS__, 'run_setup_mcp'],
 			],
+			'recover_codex_runner' => [
+				'label' => 'Recover Codex runner after prod→staging push',
+				'description' => 'Repairs staging Codex runner settings, runner.env, cron entries, daemon, and runs one worker pass.',
+				'runner' => [__CLASS__, 'run_recover_codex_runner'],
+			],
 		];
 	}
 
@@ -152,6 +157,275 @@ class Actions {
 			return 'staging';
 		}
 		return 'production';
+	}
+
+	private static function is_safe_dev_environment() {
+		$site_url = (string) get_site_url();
+		$host = (string) wp_parse_url($site_url, PHP_URL_HOST);
+		$wp_env = function_exists('wp_get_environment_type') ? (string) wp_get_environment_type() : '';
+
+		if ($wp_env && $wp_env !== 'production') {
+			return true;
+		}
+
+		return (
+			strpos($host, 'hpdevplus') !== false
+			|| strpos($host, 'staging') !== false
+			|| strpos($host, 'kinsta.cloud') !== false
+		);
+	}
+
+	private static function read_runner_env($env_file) {
+		$values = [];
+		if (!is_readable($env_file)) {
+			return $values;
+		}
+
+		$lines = file($env_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+		if (!is_array($lines)) {
+			return $values;
+		}
+
+		foreach ($lines as $line) {
+			if (!preg_match('/^export\s+([A-Z0-9_]+)=(.*)$/', trim($line), $matches)) {
+				continue;
+			}
+			$value = trim($matches[2]);
+			$value = trim($value, "\"'");
+			$values[$matches[1]] = $value;
+		}
+
+		return $values;
+	}
+
+	private static function write_runner_env($env_file, array $values) {
+		$dir = dirname($env_file);
+		if (!is_dir($dir) && !wp_mkdir_p($dir)) {
+			return ['ok' => false, 'message' => 'Cannot create runner state directory'];
+		}
+
+		$lines = [];
+		foreach ($values as $key => $value) {
+			$key = preg_replace('/[^A-Z0-9_]/', '', (string) $key);
+			if ($key === '') {
+				continue;
+			}
+			$escaped = str_replace(['\\', '"'], ['\\\\', '\\"'], (string) $value);
+			$lines[] = 'export ' . $key . '="' . $escaped . '"';
+		}
+
+		$written = file_put_contents($env_file, implode("\n", $lines) . "\n");
+		if ($written === false) {
+			return ['ok' => false, 'message' => 'Cannot write runner.env'];
+		}
+
+		@chmod($env_file, 0600);
+		return ['ok' => true, 'message' => 'runner.env updated'];
+	}
+
+	private static function shell_command($command, $input = '') {
+		if (!function_exists('proc_open')) {
+			return [
+				'ok' => false,
+				'exit_code' => 127,
+				'stdout' => '',
+				'stderr' => 'proc_open is disabled',
+			];
+		}
+
+		$descriptor_spec = [
+			0 => ['pipe', 'r'],
+			1 => ['pipe', 'w'],
+			2 => ['pipe', 'w'],
+		];
+
+		$process = proc_open($command, $descriptor_spec, $pipes);
+		if (!is_resource($process)) {
+			return [
+				'ok' => false,
+				'exit_code' => 127,
+				'stdout' => '',
+				'stderr' => 'Failed to start shell command',
+			];
+		}
+
+		fwrite($pipes[0], (string) $input);
+		fclose($pipes[0]);
+		$stdout = stream_get_contents($pipes[1]);
+		$stderr = stream_get_contents($pipes[2]);
+		fclose($pipes[1]);
+		fclose($pipes[2]);
+		$exit_code = proc_close($process);
+
+		return [
+			'ok' => $exit_code === 0,
+			'exit_code' => $exit_code,
+			'stdout' => is_string($stdout) ? trim($stdout) : '',
+			'stderr' => is_string($stderr) ? trim($stderr) : '',
+		];
+	}
+
+	private static function resolve_hp_core_plugin_root() {
+		$candidates = [
+			WP_PLUGIN_DIR . '/hp-core-infrastructure',
+			WP_PLUGIN_DIR . '/HP-Core-Infrastructure',
+		];
+
+		foreach ($candidates as $candidate) {
+			if (is_dir($candidate) && file_exists($candidate . '/hp-core-infrastructure.php')) {
+				return $candidate;
+			}
+		}
+
+		$matches = glob(WP_PLUGIN_DIR . '/*/hp-core-infrastructure.php');
+		if (is_array($matches) && !empty($matches[0])) {
+			return dirname($matches[0]);
+		}
+
+		return '';
+	}
+
+	private static function derive_runner_id() {
+		$site_url = (string) get_site_url();
+		$host = (string) wp_parse_url($site_url, PHP_URL_HOST);
+		$host = strtolower($host ?: 'staging');
+		$host = preg_replace('/[^a-z0-9]+/', '-', $host);
+		$host = trim((string) $host, '-');
+
+		if (strpos($host, 'hpdevplus') !== false) {
+			return 'hp-dev-plus-staging';
+		}
+
+		return ($host ?: 'hp-dev') . '-codex-runner';
+	}
+
+	private static function recover_runner_settings($runner_id) {
+		$option = get_option('hp_core_ai_settings', []);
+		if (!is_array($option)) {
+			$option = [];
+		}
+		if (!isset($option['runner']) || !is_array($option['runner'])) {
+			$option['runner'] = [];
+		}
+
+		$before = $option['runner'];
+		$option['runner']['enabled'] = true;
+		$option['runner']['mode'] = 'kinsta_local_cron';
+		$option['runner']['label'] = $option['runner']['label'] ?? 'Primary Codex Runner';
+		$option['runner']['expected_interval_minutes'] = absint($option['runner']['expected_interval_minutes'] ?? 5) ?: 5;
+		$option['runner']['max_jobs_per_run'] = absint($option['runner']['max_jobs_per_run'] ?? 3) ?: 3;
+		$option['runner']['job_timeout_seconds'] = absint($option['runner']['job_timeout_seconds'] ?? 120) ?: 120;
+		update_option('hp_core_ai_settings', $option, false);
+
+		$status = get_option('hp_core_ai_runner_status', []);
+		if (is_array($status)) {
+			$status['runner_id'] = $runner_id;
+			update_option('hp_core_ai_runner_status', $status, false);
+		}
+
+		return $before !== $option['runner'];
+	}
+
+	public static function run_recover_codex_runner($mode = 'enable') {
+		if ($mode === 'ignore') {
+			return ['ok' => true, 'message' => 'Codex runner recovery ignored', 'changed' => false];
+		}
+
+		if (!self::is_safe_dev_environment()) {
+			return [
+				'ok' => false,
+				'message' => 'Refused to recover Codex runner on a production-looking environment.',
+				'changed' => false,
+			];
+		}
+
+		$core_root = self::resolve_hp_core_plugin_root();
+		if ($core_root === '') {
+			return [
+				'ok' => false,
+				'message' => 'HP Core plugin root not found.',
+				'changed' => false,
+			];
+		}
+
+		$wp_root = rtrim(ABSPATH, '/\\');
+		$site_root = dirname($wp_root);
+		$runner_home = $site_root . '/.hp-codex-runner';
+		$state_dir = $runner_home . '/state';
+		$env_file = $state_dir . '/runner.env';
+		$existing_env = self::read_runner_env($env_file);
+		$runner_id = self::derive_runner_id();
+		$codex_bin = $existing_env['HP_CODEX_BIN'] ?? ($runner_home . '/app/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex/codex');
+		$php_bin = $existing_env['HP_PHP_BIN'] ?? '/usr/bin/php';
+
+		$messages = [];
+		$changed = false;
+
+		$settings_changed = self::recover_runner_settings($runner_id);
+		$changed = $changed || $settings_changed;
+		$messages[] = $settings_changed ? 'HP Core runner settings repaired' : 'HP Core runner settings already correct';
+
+		$env_values = array_merge($existing_env, [
+			'HP_WP_ROOT' => $wp_root,
+			'HP_CODEX_RUNNER_HOME' => $runner_home,
+			'HP_HP_CORE_PLUGIN_ROOT' => $core_root,
+			'HP_PHP_BIN' => $php_bin,
+			'HP_CODEX_BIN' => $codex_bin,
+			'HP_CODEX_RUNNER_ID' => $runner_id,
+			'HP_CODEX_DAEMON_HOST' => '127.0.0.1',
+			'HP_CODEX_DAEMON_PORT' => '17777',
+			'CODEX_HOME' => $runner_home . '/auth',
+		]);
+		$env_result = self::write_runner_env($env_file, $env_values);
+		$messages[] = $env_result['message'];
+		if (!$env_result['ok']) {
+			return ['ok' => false, 'message' => implode('; ', $messages), 'changed' => $changed];
+		}
+		$changed = true;
+
+		$cron_lines = [
+			'*/5 * * * * ' . $core_root . '/bin/kinsta-codex-runner-daemon.sh ensure',
+			'*/5 * * * * ' . $core_root . '/bin/kinsta-codex-runner-cron.sh',
+		];
+		$current_cron = self::shell_command('crontab -l 2>/dev/null || true');
+		$cron_body = $current_cron['stdout'];
+		$kept_lines = [];
+		foreach (preg_split('/\r\n|\r|\n/', $cron_body) as $line) {
+			if (trim($line) === '') {
+				continue;
+			}
+			if (strpos($line, 'kinsta-codex-runner-daemon.sh') !== false || strpos($line, 'kinsta-codex-runner-cron.sh') !== false) {
+				continue;
+			}
+			$kept_lines[] = $line;
+		}
+		$new_cron = implode("\n", array_merge($kept_lines, $cron_lines)) . "\n";
+		$cron_result = self::shell_command('crontab -', $new_cron);
+		if ($cron_result['ok']) {
+			$messages[] = 'Runner cron entries restored';
+			$changed = true;
+		} else {
+			$messages[] = 'Cron restore failed: ' . ($cron_result['stderr'] ?: 'unknown error');
+		}
+
+		$daemon_cmd = 'cd ' . escapeshellarg($core_root) . ' && ./bin/kinsta-codex-runner-daemon.sh ensure';
+		$daemon_result = self::shell_command($daemon_cmd);
+		$messages[] = $daemon_result['ok']
+			? 'Runner daemon ensured'
+			: 'Daemon ensure failed: ' . ($daemon_result['stderr'] ?: $daemon_result['stdout'] ?: 'unknown error');
+
+		$worker_cmd = 'cd ' . escapeshellarg($core_root) . ' && ./bin/kinsta-codex-runner-cron.sh';
+		$worker_result = self::shell_command($worker_cmd);
+		$messages[] = $worker_result['ok']
+			? 'Runner worker pass completed'
+			: 'Worker pass failed: ' . ($worker_result['stderr'] ?: $worker_result['stdout'] ?: 'unknown error');
+
+		$ok = $cron_result['ok'] && $daemon_result['ok'] && $worker_result['ok'];
+		return [
+			'ok' => $ok,
+			'message' => implode('; ', $messages),
+			'changed' => $changed || $ok,
+		];
 	}
 
 	/**
