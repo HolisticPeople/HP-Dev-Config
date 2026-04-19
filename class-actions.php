@@ -31,6 +31,11 @@ class Actions {
 				'description' => 'Repairs staging Codex runner settings, runner.env, cron entries, daemon, and runs one worker pass.',
 				'runner' => [__CLASS__, 'run_recover_codex_runner'],
 			],
+			'recover_inspector_worker' => [
+				'label' => 'Recover Inspector worker cron after prod→staging push',
+				'description' => 'Restores the dedicated HP Inspector WP-CLI worker cron and runs one process pass.',
+				'runner' => [__CLASS__, 'run_recover_inspector_worker'],
+			],
 		];
 	}
 
@@ -425,6 +430,67 @@ class Actions {
 			'ok' => $ok,
 			'message' => implode('; ', $messages),
 			'changed' => $changed || $ok,
+		];
+	}
+
+	public static function run_recover_inspector_worker($mode = 'enable') {
+		if ($mode === 'ignore') {
+			return ['ok' => true, 'message' => 'Inspector worker recovery ignored', 'changed' => false];
+		}
+
+		if (!self::is_safe_dev_environment()) {
+			return [
+				'ok' => false,
+				'message' => 'Refused to recover Inspector worker on a production-looking environment.',
+				'changed' => false,
+			];
+		}
+
+		$wp_root = rtrim(ABSPATH, '/\\');
+		if (!file_exists($wp_root . '/wp-load.php')) {
+			return [
+				'ok' => false,
+				'message' => 'WordPress root not found for Inspector worker cron.',
+				'changed' => false,
+			];
+		}
+
+		$messages = [];
+		$changed = false;
+		$cron_line = '*/5 * * * * cd ' . $wp_root . ' && wp hp-inspector process --all --quiet >/dev/null 2>&1';
+		$current_cron = self::shell_command('crontab -l 2>/dev/null || true');
+		$cron_body = $current_cron['stdout'];
+		$kept_lines = [];
+
+		foreach (preg_split('/\r\n|\r|\n/', $cron_body) as $line) {
+			if (trim($line) === '') {
+				continue;
+			}
+			if (strpos($line, 'wp hp-inspector process') !== false) {
+				continue;
+			}
+			$kept_lines[] = $line;
+		}
+
+		$new_cron = implode("\n", array_merge($kept_lines, [$cron_line])) . "\n";
+		$cron_result = self::shell_command('crontab -', $new_cron);
+		if ($cron_result['ok']) {
+			$messages[] = 'Inspector worker cron restored';
+			$changed = true;
+		} else {
+			$messages[] = 'Inspector worker cron restore failed: ' . ($cron_result['stderr'] ?: 'unknown error');
+		}
+
+		$worker_cmd = 'cd ' . escapeshellarg($wp_root) . ' && wp hp-inspector process --all --quiet';
+		$worker_result = self::shell_command($worker_cmd);
+		$messages[] = $worker_result['ok']
+			? 'Inspector worker pass completed'
+			: 'Inspector worker pass failed: ' . ($worker_result['stderr'] ?: $worker_result['stdout'] ?: 'unknown error');
+
+		return [
+			'ok' => $cron_result['ok'] && $worker_result['ok'],
+			'message' => implode('; ', $messages),
+			'changed' => $changed || $worker_result['ok'],
 		];
 	}
 

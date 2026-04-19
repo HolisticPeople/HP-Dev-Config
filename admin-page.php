@@ -286,6 +286,14 @@ settings_errors('dev_cfg');
 							?>
 							<label style="margin-right:8px;"><input type="radio" name="dev_cfg_action[recover_codex_runner]" value="ignore" <?php checked($runner_mode === 'ignore'); ?> /> Ignore</label>
 							<label><input type="radio" name="dev_cfg_action[recover_codex_runner]" value="enable" <?php checked($runner_mode === 'enable'); ?> /> Enable</label>
+						<?php elseif ($key === 'recover_inspector_worker'): ?>
+							<?php
+							$inspector_worker_mode = isset($ui['other_actions']['recover_inspector_worker'])
+								? $ui['other_actions']['recover_inspector_worker']
+								: (DevCfg\Actions::detect_environment() === 'staging' ? 'enable' : 'ignore');
+							?>
+							<label style="margin-right:8px;"><input type="radio" name="dev_cfg_action[recover_inspector_worker]" value="ignore" <?php checked($inspector_worker_mode === 'ignore'); ?> /> Ignore</label>
+							<label><input type="radio" name="dev_cfg_action[recover_inspector_worker]" value="enable" <?php checked($inspector_worker_mode === 'enable'); ?> /> Enable</label>
 						<?php else: ?>
 							<input type="checkbox" name="dev_cfg_action[<?php echo esc_attr($key); ?>]" value="1" <?php checked(!empty($ui['other_actions'][$key])); ?> />
 						<?php endif; ?>
