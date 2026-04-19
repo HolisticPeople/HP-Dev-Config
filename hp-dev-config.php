@@ -3,7 +3,7 @@
  * Plugin Name: HP Dev Configuration
  * Plugin URI: https://github.com/HolisticPeople/HP-Dev-Config
  * Description: One-click dev/staging setup under Tools → Dev Configuration. Choose plugins to force enable/disable and run predefined actions (e.g., noindex). Changes apply only when you click Apply; no auto-enforcement.
- * Version: 2.2.0
+ * Version: 2.4.0
  * Author: HolisticPeople
  * Author URI: https://holisticpeople.com
  */
@@ -19,7 +19,7 @@ if (!function_exists('dev_cfg_array_get')) {
 }
 
 if (!defined('DEV_CFG_PLUGIN_VERSION')) {
-    define('DEV_CFG_PLUGIN_VERSION', '2.2.0');
+    define('DEV_CFG_PLUGIN_VERSION', '2.4.0');
 }
 
 class DevCfgPlugin {
@@ -98,6 +98,7 @@ class DevCfgPlugin {
 			'other_actions' => [
 				'noindex' => true,
 				'fluent_smtp_simulation' => 'enable',
+				'recover_codex_runner' => 'enable',
 			],
 		];
 	}
@@ -190,6 +191,13 @@ class DevCfgPlugin {
                 $actions['fluent_smtp_simulation'] = $mode; // pass mode to runner
             }
             unset($rawActions['fluent_smtp_simulation']);
+        }
+        if (isset($rawActions['recover_codex_runner'])) {
+            $mode = sanitize_text_field($rawActions['recover_codex_runner']);
+            if ($mode === 'enable' || $mode === 'ignore') {
+                $actions['recover_codex_runner'] = $mode; // pass mode to runner
+            }
+            unset($rawActions['recover_codex_runner']);
         }
         foreach ($rawActions as $key => $val) {
             $key = sanitize_key($key);

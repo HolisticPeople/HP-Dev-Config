@@ -25,6 +25,8 @@ This plugin does not auto-enforce; it only applies changes when you click Apply.
 - `noindex`: sets `blog_public = 0`
 - `delete_debug_logs`: removes debug.log files from wp-content
 - `fluent_smtp_simulation`: controls FluentSMTP's email simulation mode
+- `setup_mcp`: restores WooCommerce MCP credentials and the MCP MU plugin after a production to staging push
+- `recover_codex_runner`: repairs the staging Codex runner after a production to staging push by enabling HP Core runner settings, rewriting `runner.env`, restoring runner cron entries, ensuring the daemon, and running one worker pass
 
 Extend by editing `class-actions.php` and adding more entries to the registry.
 
