@@ -3,13 +3,20 @@
  * Plugin Name: HP Dev Configuration
  * Plugin URI: https://github.com/HolisticPeople/HP-Dev-Config
  * Description: One-click dev/staging setup under Tools → Dev Configuration. Choose plugins to force enable/disable and run predefined actions (e.g., noindex). Changes apply only when you click Apply; no auto-enforcement.
- * Version: 2.5.0
+ * Version: 3.0.0
  * Author: HolisticPeople
+ * Requires PHP: 8.5
  * Author URI: https://holisticpeople.com
  */
 
 if (!defined('ABSPATH')) {
 	exit;
+}
+if (PHP_VERSION_ID < 80500) {
+    add_action('admin_notices', static function (): void {
+        echo '<div class="notice notice-error"><p>' . esc_html(sprintf('HP Dev Configuration requires PHP 8.5 or higher. Current PHP version: %s.', PHP_VERSION)) . '</p></div>';
+    });
+    return;
 }
 
 if (!function_exists('dev_cfg_array_get')) {
@@ -18,8 +25,34 @@ if (!function_exists('dev_cfg_array_get')) {
 	}
 }
 
+if (!function_exists('dev_cfg_php85_runtime_diagnostics')) {
+	/**
+	 * Return PHP 8.5 platform diagnostics for the dev/staging tools page.
+	 *
+	 * @return array<string, mixed>
+	 */
+	function dev_cfg_php85_runtime_diagnostics(): array {
+		$opcache = function_exists('opcache_get_status') ? opcache_get_status(false) : false;
+
+		return [
+			'php_version'            => PHP_VERSION,
+			'php_version_id'         => PHP_VERSION_ID,
+			'baseline_supported'     => PHP_VERSION_ID >= 80500,
+			'opcache_loaded'         => extension_loaded('Zend OPcache'),
+			'opcache_enabled'        => is_array($opcache) ? (bool) ($opcache['opcache_enabled'] ?? false) : false,
+			'uri_extension_loaded'   => extension_loaded('uri'),
+			'uri_whatwg_available'   => class_exists(\Uri\WhatWg\Url::class),
+			'uri_rfc3986_available'  => class_exists(\Uri\Rfc3986\Uri::class),
+			'curl_loaded'            => extension_loaded('curl'),
+			'fatal_error_backtraces' => ini_get('fatal_error_backtraces'),
+			'array_first_available'  => function_exists('array_first'),
+			'array_last_available'   => function_exists('array_last'),
+		];
+	}
+}
+
 if (!defined('DEV_CFG_PLUGIN_VERSION')) {
-    define('DEV_CFG_PLUGIN_VERSION', '2.5.0');
+    define('DEV_CFG_PLUGIN_VERSION', '3.0.0');
 }
 
 class DevCfgPlugin {

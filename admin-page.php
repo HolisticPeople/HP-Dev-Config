@@ -16,6 +16,19 @@ settings_errors('dev_cfg');
 <div class="wrap">
 	<h1>Dev Configuration <span style="font-weight:normal;color:#666;">v<?php echo esc_html(defined('DEV_CFG_PLUGIN_VERSION') ? DEV_CFG_PLUGIN_VERSION : ''); ?></span></h1>
 
+	<?php $php85 = function_exists('dev_cfg_php85_runtime_diagnostics') ? dev_cfg_php85_runtime_diagnostics() : []; ?>
+	<div class="dev-cfg-runtime-section" style="background:#fff; border:1px solid #ccd0d4; border-left:4px solid #2271b1; border-radius:4px; padding:16px; margin:16px 0 20px;">
+		<h2 style="margin-top:0; margin-bottom:12px;">PHP 8.5 Runtime</h2>
+		<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px;">
+			<?php foreach ($php85 as $label => $value): ?>
+				<div style="background:#f6f7f7; border:1px solid #dcdcde; border-radius:4px; padding:8px 10px;">
+					<strong style="display:block;"><?php echo esc_html(str_replace('_', ' ', $label)); ?></strong>
+					<code><?php echo esc_html(is_bool($value) ? ($value ? 'yes' : 'no') : (string) $value); ?></code>
+				</div>
+			<?php endforeach; ?>
+		</div>
+	</div>
+
 	<!-- Configuration Management Section -->
 	<div class="dev-cfg-config-section" style="background:#f9f9f9; border:1px solid #ccd0d4; border-radius:4px; padding:16px; margin-bottom:20px;">
 		<h2 style="margin-top:0; margin-bottom:12px; display:flex; align-items:center; gap:8px;">

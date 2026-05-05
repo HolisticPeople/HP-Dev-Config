@@ -47,3 +47,7 @@ Configure these GitHub repo secrets:
 - `REMOTE_PATH`: absolute path to `wp-content/plugins/HP-Dev-Config` on the server
 
 The workflow uses rsync over SSH to sync `HP-Dev-Config/` to your server, excluding `.git` and `.github`.
+
+## Runtime Requirements
+
+- PHP 8.5+
