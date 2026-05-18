@@ -3,7 +3,7 @@
  * Plugin Name: HP Dev Configuration
  * Plugin URI: https://github.com/HolisticPeople/HP-Dev-Config
  * Description: One-click dev/staging setup under Tools → Dev Configuration. Choose plugins to force enable/disable and run predefined actions (e.g., noindex). Changes apply only when you click Apply; no auto-enforcement.
- * Version: 3.0.0
+ * Version: 3.0.1
  * Author: HolisticPeople
  * Requires PHP: 8.5
  * Author URI: https://holisticpeople.com
@@ -52,7 +52,7 @@ if (!function_exists('dev_cfg_php85_runtime_diagnostics')) {
 }
 
 if (!defined('DEV_CFG_PLUGIN_VERSION')) {
-    define('DEV_CFG_PLUGIN_VERSION', '3.0.0');
+    define('DEV_CFG_PLUGIN_VERSION', '3.0.1');
 }
 
 class DevCfgPlugin {
@@ -63,8 +63,17 @@ class DevCfgPlugin {
 	public static function init() {
 		add_action('admin_menu', [__CLASS__, 'register_tools_page']);
 		add_action('admin_init', [__CLASS__, 'handle_post_actions']);
+		add_action('admin_enqueue_scripts', [__CLASS__, 'enqueue_admin_surface']);
 		// Add Settings link in Plugins list
 		add_filter('plugin_action_links_' . plugin_basename(__FILE__), [__CLASS__, 'plugin_action_links']);
+	}
+
+	public static function enqueue_admin_surface($hook_suffix) {
+		if ($hook_suffix !== 'tools_page_' . self::MENU_SLUG) {
+			return;
+		}
+
+		do_action('hp_zen_enqueue_admin_surface', 'hp-dev-config');
 	}
 
 	public static function register_tools_page() {
