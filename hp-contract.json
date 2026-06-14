@@ -1,0 +1,26 @@
+{
+  "plugin": "HP-Dev-Config",
+  "repo": "HolisticPeople/HP-Dev-Config",
+  "schema_version": "1.0",
+  "owns": [
+    "repo-local plugin behavior to be confirmed by owning lane"
+  ],
+  "must_not_own": [
+    "cross-plugin source mutation without registered contract"
+  ],
+  "consumes": [],
+  "exposes": {
+    "cpts": [],
+    "rest": [],
+    "shortcodes": [],
+    "providers": []
+  },
+  "verification": {
+    "staging": {
+      "status": "unverified"
+    },
+    "production": {
+      "status": "unverified"
+    }
+  }
+}
