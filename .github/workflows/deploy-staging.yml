@@ -54,3 +54,13 @@ jobs:
             --exclude ".git" \
             --exclude ".github" \
             ./ "$SSH_USER@$SSH_HOST:$DEST/"
+
+      - name: Purge Kinsta page cache
+        env:
+          SSH_HOST: ${{ secrets.KINSTA_HOST }}
+          SSH_USER: ${{ secrets.KINSTA_USER }}
+          SSH_PORT: ${{ secrets.KINSTA_PORT }}
+        run: |
+          if [ -z "$SSH_PORT" ]; then SSH_PORT=22; fi
+          ssh -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "cd ~/public && wp kinsta cache purge --all"
