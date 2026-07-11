@@ -3,12 +3,19 @@
   "repo": "HolisticPeople/HP-Dev-Config",
   "schema_version": "1.0",
   "owns": [
-    "repo-local plugin behavior to be confirmed by owning lane"
+    "staging environment recovery after Kinsta prod-to-staging pushes (WooCommerce MCP credentials + MU plugin restore, Codex runner recovery, Inspector worker recovery)",
+    "named plugin enable/disable configurations applied on demand (Tools > Dev Configuration, dev_config_plugin_settings option)",
+    "dev-only site toggles: search-engine noindex, debug.log cleanup, FluentSMTP email-simulation mode"
   ],
   "must_not_own": [
-    "cross-plugin source mutation without registered contract"
+    "cross-plugin source mutation without registered contract",
+    "production site mutation (all actions are environment-gated to safe dev/staging)"
   ],
-  "consumes": [],
+  "consumes": [
+    "FluentSMTP settings option (fluentmail-settings), fail-soft when absent",
+    "HP-Core staging runner settings (Codex runner recovery)",
+    "HP-Inspector worker cron surface (recovery pass)"
+  ],
   "exposes": {
     "cpts": [],
     "rest": [],
