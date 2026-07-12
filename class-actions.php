@@ -36,8 +36,31 @@ class Actions {
 				'description' => 'Restores the dedicated HP Inspector WP-CLI worker cron and runs one process pass.',
 				'runner' => [__CLASS__, 'run_recover_inspector_worker'],
 			],
+			'crypto_snapshot' => [
+				'label' => 'Snapshot staging crypto config before prod→staging push',
+				'description' => 'Saves approved non-secret staging crypto settings outside the public web root.',
+				'runner' => [__CLASS__, 'run_crypto_snapshot'],
+			],
+			'crypto_restore' => [
+				'label' => 'Restore and verify staging crypto config after push',
+				'description' => 'Restores the staging bucket, forces customer crypto features off, and checks Base Sepolia isolation.',
+				'runner' => [__CLASS__, 'run_crypto_restore'],
+			],
+			'crypto_verify' => [
+				'label' => 'Verify staging crypto environment isolation',
+				'description' => 'Checks staging resolution, Base Sepolia allowlist, mainnet denial, and customer-facing switches.',
+				'runner' => [__CLASS__, 'run_crypto_verify'],
+			],
 		];
 	}
+
+	private static function crypto_state_service() {
+		require_once __DIR__ . '/class-crypto-environment-state.php';
+	}
+
+	public static function run_crypto_snapshot() { self::crypto_state_service(); return Crypto_Environment_State::snapshot(); }
+	public static function run_crypto_restore() { self::crypto_state_service(); return Crypto_Environment_State::restore_and_verify(); }
+	public static function run_crypto_verify() { self::crypto_state_service(); return Crypto_Environment_State::verify(); }
 
 	public static function run_noindex() {
 		update_option('blog_public', '0');
