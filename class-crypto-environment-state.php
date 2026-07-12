@@ -95,7 +95,7 @@ final class Crypto_Environment_State {
 
 	private static function invariants(): array {
 		$environment = apply_filters('hp_governance_environment', null);
-		$allowed = apply_filters('hp_governance_allowed_chains', []);
+		$allowed = apply_filters('hp_governance_allowed_chains', null);
 		$gateway = get_option('woocommerce_hp_crypto_usdc_settings', []);
 		$flags = get_option('hp_login_provider_flags', []);
 		return [
