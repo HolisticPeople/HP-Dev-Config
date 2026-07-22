@@ -3,7 +3,7 @@
  * Plugin Name: HP Dev Configuration
  * Plugin URI: https://github.com/HolisticPeople/HP-Dev-Config
  * Description: One-click dev/staging setup under Tools → Dev Configuration. Choose plugins to force enable/disable and run predefined actions (e.g., noindex). Changes apply only when you click Apply; no auto-enforcement.
- * Version: 3.1.0
+ * Version: 3.1.1
  * Author: HolisticPeople
  * Requires PHP: 8.5
  * Author URI: https://holisticpeople.com
@@ -52,7 +52,22 @@ if (!function_exists('dev_cfg_php85_runtime_diagnostics')) {
 }
 
 if (!defined('DEV_CFG_PLUGIN_VERSION')) {
-    define('DEV_CFG_PLUGIN_VERSION', '3.0.1');
+    define('DEV_CFG_PLUGIN_VERSION', '3.1.1');
+}
+
+if (!function_exists('dev_cfg_plugin_version')) {
+	function dev_cfg_plugin_version(): string {
+		if (function_exists('get_plugin_data')) {
+			$plugin_data = get_plugin_data(__FILE__, false, false);
+			$version = isset($plugin_data['Version']) ? trim((string) $plugin_data['Version']) : '';
+
+			if ($version !== '') {
+				return $version;
+			}
+		}
+
+		return defined('DEV_CFG_PLUGIN_VERSION') ? DEV_CFG_PLUGIN_VERSION : '';
+	}
 }
 
 class DevCfgPlugin {
@@ -565,4 +580,3 @@ private static function apply_configuration($policies, $actions) {
 }
 
 DevCfgPlugin::init();
-

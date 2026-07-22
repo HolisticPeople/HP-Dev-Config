@@ -10,11 +10,12 @@ require_once __DIR__ . '/class-actions.php';
 $registry = DevCfg\Actions::registry();
 $mcp_creds = DevCfg\Actions::get_mcp_credentials();
 $current_env = DevCfg\Actions::detect_environment();
+$plugin_version = function_exists('dev_cfg_plugin_version') ? dev_cfg_plugin_version() : '';
 
 settings_errors('dev_cfg');
 ?>
 <div class="wrap">
-	<h1>Dev Configuration <span style="font-weight:normal;color:#666;">v<?php echo esc_html(defined('DEV_CFG_PLUGIN_VERSION') ? DEV_CFG_PLUGIN_VERSION : ''); ?></span></h1>
+	<h1>Dev Configuration <span style="font-weight:normal;color:#666;">v<?php echo esc_html($plugin_version); ?></span></h1>
 
 	<?php $php85 = function_exists('dev_cfg_php85_runtime_diagnostics') ? dev_cfg_php85_runtime_diagnostics() : []; ?>
 	<div class="dev-cfg-runtime-section" style="background:#fff; border:1px solid #ccd0d4; border-left:4px solid #2271b1; border-radius:4px; padding:16px; margin:16px 0 20px;">

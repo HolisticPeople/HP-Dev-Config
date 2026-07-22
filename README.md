@@ -68,6 +68,12 @@ The workflow uses rsync over SSH to sync `HP-Dev-Config/` to your server, exclud
 
 ## Changelog
 
+### 3.1.1
+
+- Kept the Tools page version label in sync with the plugin header metadata.
+- Added a contract check for plugin header, version constant, and admin heading
+  drift.
+
 ### 3.1.0
 
 - Added guarded staging crypto configuration snapshot, restore, and invariant
