@@ -3,7 +3,7 @@
  * Plugin Name: HP Dev Configuration
  * Plugin URI: https://github.com/HolisticPeople/HP-Dev-Config
  * Description: One-click dev/staging setup under Tools → Dev Configuration. Choose plugins to force enable/disable and run predefined actions (e.g., noindex). Changes apply only when you click Apply; no auto-enforcement.
- * Version: 3.1.1
+ * Version: 3.1.2
  * Author: HolisticPeople
  * Requires PHP: 8.5
  * Author URI: https://holisticpeople.com
@@ -12,7 +12,7 @@
 if (!defined('ABSPATH')) {
 	exit;
 }
-if (PHP_VERSION_ID < 80500) {
+if (PHP_VERSION_ID < 80500 && !defined('DEV_CFG_TEST_BOOTSTRAP')) {
     add_action('admin_notices', static function (): void {
         echo '<div class="notice notice-error"><p>' . esc_html(sprintf('HP Dev Configuration requires PHP 8.5 or higher. Current PHP version: %s.', PHP_VERSION)) . '</p></div>';
     });
@@ -52,7 +52,7 @@ if (!function_exists('dev_cfg_php85_runtime_diagnostics')) {
 }
 
 if (!defined('DEV_CFG_PLUGIN_VERSION')) {
-    define('DEV_CFG_PLUGIN_VERSION', '3.1.1');
+    define('DEV_CFG_PLUGIN_VERSION', '3.1.2');
 }
 
 if (!function_exists('dev_cfg_plugin_version')) {
@@ -237,39 +237,61 @@ class DevCfgPlugin {
 		return $policies;
 	}
 
-    private static function sanitize_other_actions($rawActions) {
-        $actions = [];
-        if (!is_array($rawActions)) {
-            return $actions;
-        }
-        // Special handling: FluentSMTP simulation radio (ignore/enable/disable)
-        if (isset($rawActions['fluent_smtp_simulation'])) {
-            $mode = sanitize_text_field($rawActions['fluent_smtp_simulation']);
-            if ($mode === 'enable' || $mode === 'disable') {
-                $actions['fluent_smtp_simulation'] = $mode; // pass mode to runner
-            }
-            unset($rawActions['fluent_smtp_simulation']);
-        }
-        if (isset($rawActions['recover_codex_runner'])) {
-            $mode = sanitize_text_field($rawActions['recover_codex_runner']);
-            if ($mode === 'enable' || $mode === 'ignore') {
-                $actions['recover_codex_runner'] = $mode; // pass mode to runner
-            }
-            unset($rawActions['recover_codex_runner']);
-        }
-        if (isset($rawActions['recover_inspector_worker'])) {
-            $mode = sanitize_text_field($rawActions['recover_inspector_worker']);
-            if ($mode === 'enable' || $mode === 'ignore') {
-                $actions['recover_inspector_worker'] = $mode; // pass mode to runner
-            }
-            unset($rawActions['recover_inspector_worker']);
-        }
-        foreach ($rawActions as $key => $val) {
-            $key = sanitize_key($key);
-            $actions[$key] = (bool)$val;
-        }
-        return $actions;
-    }
+	private static function sanitize_other_actions($rawActions) {
+		$actions = [];
+		if (!is_array($rawActions)) {
+			return $actions;
+		}
+		// Special handling: FluentSMTP simulation radio (ignore/enable/disable)
+		if (isset($rawActions['fluent_smtp_simulation'])) {
+			$mode = sanitize_text_field($rawActions['fluent_smtp_simulation']);
+			if ($mode === 'enable' || $mode === 'disable') {
+				$actions['fluent_smtp_simulation'] = $mode; // pass mode to runner
+			}
+			unset($rawActions['fluent_smtp_simulation']);
+		}
+		if (isset($rawActions['recover_codex_runner'])) {
+			$mode = sanitize_text_field($rawActions['recover_codex_runner']);
+			if ($mode === 'enable' || $mode === 'ignore') {
+				$actions['recover_codex_runner'] = $mode; // pass mode to runner
+			}
+			unset($rawActions['recover_codex_runner']);
+		}
+		if (isset($rawActions['recover_inspector_worker'])) {
+			$mode = sanitize_text_field($rawActions['recover_inspector_worker']);
+			if ($mode === 'enable' || $mode === 'ignore') {
+				$actions['recover_inspector_worker'] = $mode; // pass mode to runner
+			}
+			unset($rawActions['recover_inspector_worker']);
+		}
+		foreach ($rawActions as $key => $val) {
+			$key = sanitize_key($key);
+			$actions[$key] = (bool)$val;
+		}
+		return $actions;
+	}
+
+	private static function save_mcp_credentials_from_post($rawCredentials) {
+		if (!is_array($rawCredentials)) {
+			return;
+		}
+
+		require_once __DIR__ . '/class-actions.php';
+
+		foreach (['staging', 'production'] as $env) {
+			if (!isset($rawCredentials[$env]) || !is_array($rawCredentials[$env])) {
+				continue;
+			}
+
+			$ck = isset($rawCredentials[$env]['consumer_key']) ? sanitize_text_field($rawCredentials[$env]['consumer_key']) : '';
+			$cs = isset($rawCredentials[$env]['consumer_secret']) ? sanitize_text_field($rawCredentials[$env]['consumer_secret']) : '';
+			$uid = isset($rawCredentials[$env]['user_id']) ? absint($rawCredentials[$env]['user_id']) : 1;
+
+			if ($ck || $cs) {
+				DevCfg\Actions::save_mcp_credentials($env, $ck, $cs, $uid);
+			}
+		}
+	}
 
 	public static function handle_post_actions() {
 		if (!is_admin() || !current_user_can('manage_options')) {
@@ -362,20 +384,7 @@ class DevCfgPlugin {
 				wp_die('Security check failed. Please try again.');
 			}
 			
-			// Save MCP credentials if provided
-			if (isset($_POST['mcp_creds']) && is_array($_POST['mcp_creds'])) {
-				require_once __DIR__ . '/class-actions.php';
-				foreach (['staging', 'production'] as $env) {
-					if (isset($_POST['mcp_creds'][$env])) {
-						$ck = isset($_POST['mcp_creds'][$env]['consumer_key']) ? sanitize_text_field($_POST['mcp_creds'][$env]['consumer_key']) : '';
-						$cs = isset($_POST['mcp_creds'][$env]['consumer_secret']) ? sanitize_text_field($_POST['mcp_creds'][$env]['consumer_secret']) : '';
-						$uid = isset($_POST['mcp_creds'][$env]['user_id']) ? absint($_POST['mcp_creds'][$env]['user_id']) : 1;
-						if ($ck || $cs) {
-							DevCfg\Actions::save_mcp_credentials($env, $ck, $cs, $uid);
-						}
-					}
-				}
-			}
+			self::save_mcp_credentials_from_post(dev_cfg_array_get($_POST, 'mcp_creds', []));
 			
 			$policies = is_array($postedPolicies) ? $postedPolicies : dev_cfg_array_get($activeConfig, 'plugin_policies', []);
 			$actions = is_array($postedActions) ? $postedActions : dev_cfg_array_get($activeConfig, 'other_actions', []);
@@ -392,20 +401,7 @@ class DevCfgPlugin {
 				wp_die('Security check failed. Please try again.');
 			}
 			
-			// Save MCP credentials if provided
-			if (isset($_POST['mcp_creds']) && is_array($_POST['mcp_creds'])) {
-				require_once __DIR__ . '/class-actions.php';
-				foreach (['staging', 'production'] as $env) {
-					if (isset($_POST['mcp_creds'][$env])) {
-						$ck = isset($_POST['mcp_creds'][$env]['consumer_key']) ? sanitize_text_field($_POST['mcp_creds'][$env]['consumer_key']) : '';
-						$cs = isset($_POST['mcp_creds'][$env]['consumer_secret']) ? sanitize_text_field($_POST['mcp_creds'][$env]['consumer_secret']) : '';
-						$uid = isset($_POST['mcp_creds'][$env]['user_id']) ? absint($_POST['mcp_creds'][$env]['user_id']) : 1;
-						if ($ck || $cs) { // Only save if at least one field is provided
-							DevCfg\Actions::save_mcp_credentials($env, $ck, $cs, $uid);
-						}
-					}
-				}
-			}
+			self::save_mcp_credentials_from_post(dev_cfg_array_get($_POST, 'mcp_creds', []));
 			
 			$policies = is_array($postedPolicies) ? $postedPolicies : [];
 			$actions = is_array($postedActions) ? $postedActions : [];
