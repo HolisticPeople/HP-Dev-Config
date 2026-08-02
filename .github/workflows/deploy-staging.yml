@@ -53,6 +53,7 @@ jobs:
             -e "ssh -p $SSH_PORT" \
             --exclude ".git" \
             --exclude ".github" \
+            --exclude "tests" \
             ./ "$SSH_USER@$SSH_HOST:$DEST/"
 
       - name: Purge Kinsta page cache
